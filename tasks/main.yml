@@ -1,0 +1,117 @@
+---
+# tasks file for vpc
+- name: create vpc
+  ec2_vpc_net:
+    name: "{{ peru }}"
+    cidr_block: "{{ cidr }}"
+    region: "{{ place }}"
+    aws_access_key: "{{ access_key }}"
+    aws_secret_key: "{{ secret_key }}"
+    state: present
+    tags:
+      Name: MY_VPC
+  register: create_vpc
+
+- name: create igw
+  ec2_vpc_igw:
+    vpc_id: "{{ create_vpc.vpc.id }}"
+    state: present
+    tags:
+      Name: MY_IGW
+  register: igw
+
+#- name: Debug IGW Output
+#  debug:
+#   var: igw
+
+- name: create public subnet
+  ec2_vpc_subnet:
+    vpc_id: "{{ create_vpc.vpc.id }}"
+    region: "{{ place }}"
+    cidr: "{{ aws_az_cidr }}"
+    az: "{{ aws_az }}"
+    tags: 
+      Name: pub_subnet
+  register: pub_sub
+
+#- debug:
+#    var: pub_sub
+
+- name: create public_rt
+  ec2_vpc_route_table:
+    vpc_id: "{{ create_vpc.vpc.id }}"
+    state: present
+    subnets:
+      - "{{ pub_sub.subnet.id }}"
+    routes:
+      - dest: 0.0.0.0/0
+        gateway_id: "{{ igw.gateway_id }}"
+    tags:
+      Name: PublicRouteTable
+  register: public_route_table
+
+- name: create private subnet
+  ec2_vpc_subnet:
+    vpc_id: "{{ create_vpc.vpc.id }}"
+    region: "{{ place }}"
+    cidr: "{{ aws_private_cidr}}"
+    az: "{{ aws_az_private }}"
+    tags: 
+      Name: private_subnet
+  register: private_sub
+
+- name: Create AZ NAT Gateway
+  ec2_vpc_nat_gateway:
+    region: "{{ place }}"
+    state: present
+    subnet_id: "{{ pub_sub.subnet.id }}"
+    wait: yes
+    if_exist_do_not_create: true
+  register: "nat_gt"
+
+#- debug:
+#    var: nat_gt
+
+- name: create private_rt
+  ec2_vpc_route_table:
+    vpc_id: "{{ create_vpc.vpc.id }}"
+    state: present
+    subnets:
+      - "{{ private_sub.subnet.id }}"
+    routes:
+      - dest: 0.0.0.0/0
+        gateway_id: "{{ nat_gt.nat_gateway_id }}"
+    tags:
+      Name: PrivateRouteTable
+  register: private_route_table
+
+- name: Create Security Group for Public Subnets
+  amazon.aws.ec2_group:
+    name: Public_sg
+    description: Allow HTTP & SSH
+    vpc_id: "{{ create_vpc.vpc.id }}"
+    region: "{{ place }}"
+    rules:
+      - proto: tcp
+        ports:
+          - 22  # SSH
+          - 80  # HTTP
+        cidr_ip: 0.0.0.0/0
+    state: present
+    tags:
+      Name: "{{ peru }}-PublicSG"
+  register: my_public_sg
+
+- name: Create Security Group for Private Subnets
+  amazon.aws.ec2_group:
+    name: Private_sg
+    description: Allow traffic only from Public SG
+    vpc_id: "{{ create_vpc.vpc.id }}"
+    region: "{{ place }}"
+    rules:
+      - proto: all  # Allow all protocols
+        group_id: "{{ my_public_sg.group_id }}"  # Reference Public SG
+    state: present
+    tags:
+      Name: "{{ peru }}-PrivateSG"
+  register: my_private_sg
