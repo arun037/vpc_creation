@@ -1,5 +1,4 @@
 # Role Name - VPC Creation
-=========
 
 A brief description of the role goes here.
 
@@ -17,13 +16,18 @@ Role Variables
 --------------
 
 The following variables can be customized to configure the VPC and its components:
-
 vars/main.yml
+
 vpc_name -	Name of the VPC	- my_vpc
+
 vpc_cidr - 	CIDR block for the VPC - 10.0.0.0/16
+
 public_subnets - List of public subnet CIDR blocks	- ["10.0.1.0/24"]
+
 private_subnets -	List of private subnet CIDR blocks -	["10.0.2.0/24"]
+
 region	- AWS region where the VPC will be created	- us-east-1
+
 aws_access_key & aws_secret_access_key are encrypted using vault
 
 Dependencies
